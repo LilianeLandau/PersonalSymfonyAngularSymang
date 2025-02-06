@@ -1,0 +1,7 @@
+<p>users works!</p>
+<p>Liste des utilisateurs :</p>
+<div *ngFor="let user of users">
+  <p>Email: {{ user.email }}</p>
+  <p>Rôles: {{ user.roles | json }}</p>
+  <hr />
+</div>
