@@ -1,0 +1,94 @@
+# 1. Installation des dépendances
+# Dans le terminal de votre projet Symfony
+composer require lexik/jwt-authentication-bundle symfony/security-bundle
+
+# 2. Configuration du bundle JWT
+# Créez/modifiez config/packages/lexik_jwt_authentication.yaml
+lexik_jwt_authentication:
+    secret_key: '%env(resolve:JWT_SECRET_KEY)%'
+    public_key: '%env(resolve:JWT_PUBLIC_KEY)%'
+    pass_phrase: '%env(JWT_PASSPHRASE)%'
+    token_ttl: 3600 # Durée de validité du token en secondes (1 heure)
+
+# 3. Configuration de la sécurité 
+# Modifiez config/packages/security.yaml
+security:
+    enable_authenticator_manager: true
+    password_hashers:
+        Symfony\Component\Security\Core\User\PasswordAuthenticatedUserInterface: 'auto'
+    
+    providers:
+        app_user_provider:
+            entity:
+                class: App\Entity\User
+                property: email
+    
+    firewalls:
+        dev:
+            pattern: ^/(_(profiler|wdt)|css|images|js)/
+            security: false
+        
+        login:
+            pattern: ^/api/login
+            stateless: true
+            json_login:
+                check_path: api_login
+                success_handler: lexik_jwt_authentication.handler.authentication_success
+                failure_handler: lexik_jwt_authentication.handler.authentication_failure
+        
+        api:
+            pattern: ^/api
+            stateless: true
+            jwt: ~
+    
+    access_control:
+        - { path: ^/api/login, roles: PUBLIC_ACCESS }
+        - { path: ^/api, roles: IS_AUTHENTICATED_FULLY }
+
+# 4. Configuration des variables d'environnement
+# Modifiez .env
+###> lexik/jwt-authentication-bundle ###
+JWT_SECRET_KEY=%kernel.project_dir%/config/jwt/private.pem
+JWT_PUBLIC_KEY=%kernel.project_dir%/config/jwt/public.pem
+JWT_PASSPHRASE=votre_phrase_secrete_complexe
+###< lexik/jwt-authentication-bundle ###
+
+# 5. Génération des clés JWT
+# Dans le terminal
+bin/console lexik:jwt:generate-keypair
+
+# 6. Contrôleur d'authentification
+# src/Controller/SecurityController.php
+<?php
+namespace App\Controller;
+
+use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
+use Symfony\Component\HttpFoundation\JsonResponse;
+use Symfony\Component\Routing\Annotation\Route;
+use Symfony\Component\Security\Http\Attribute\CurrentUser;
+use App\Entity\User;
+
+class SecurityController extends AbstractController
+{
+    #[Route('/api/login', name: 'api_login', methods: ['POST'])]
+    public function login(#[CurrentUser] ?User $user): JsonResponse
+    {
+        if (null === $user) {
+            return $this->json([
+                'message' => 'Identifiants invalides'
+            ], 401);
+        }
+
+        return $this->json([
+            'user' => $user->getUserIdentifier(),
+            'roles' => $user->getRoles()
+        ]);
+    }
+}
+
+# 7. Annotations de routing
+# config/routes.yaml
+api_login:
+    path: /api/login
+    methods: ['POST']
+    controller: App\Controller\SecurityController::login
